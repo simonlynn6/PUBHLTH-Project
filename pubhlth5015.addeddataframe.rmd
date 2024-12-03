@@ -1,0 +1,169 @@
+---
+title: "R Code for Project"
+author: "Harper Strickland"
+date: "2024-12-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+generate_choropleth_map <- function(sf_object,
+                                    column_name_as_string,
+                                    classification_scheme = "jenks",
+                                    number_of_classes = 5,
+                                    color_palette = "YlOrRd",
+                                    plot_title = "your title here") {
+  
+  class_breaks <- classIntervals(sf_object[[column_name_as_string]], 
+                                 n = number_of_classes,
+                                 style = classification_scheme)
+  
+  sf_object <- sf_object %>% mutate(class_col= cut(get(column_name_as_string), class_breaks$brks, include.lowest = TRUE))
+  
+  map <- ggplot() +
+    geom_sf(data = sf_object, aes(fill = class_col), lwd = 0.1) +
+    scale_fill_brewer(name = column_name_as_string, palette= color_palette, na.value = "grey50") +
+    ggtitle(plot_title)
+  
+  
+  return(map)
+  
+}
+library(sf)
+library(RColorBrewer)
+library(classInt)
+library(gridExtra)
+
+
+franklin <- st_read(("C:/Users/harpo/Downloads/franklin_svi_and_themes.geojson"))
+franklin
+
+socioeconomic_status_SVI <- generate_choropleth_map(franklin, 
+                              column_name_as_string = "RPL_THEME1",
+                              classification_scheme = "jenks",
+                              number_of_classes = 5,
+                              color_palette = "YlOrRd",
+                              plot_title = "Socioeconomic Status")
+
+racial_minority_status_SVI <- generate_choropleth_map(franklin, 
+                              column_name_as_string = "RPL_THEME3",
+                              classification_scheme = "jenks",
+                              number_of_classes = 5,
+                              color_palette = "YlOrRd",
+                              plot_title = "Racial & Ethnic Minority Status")
+
+socioeconomic_status_SVI
+racial_minority_status_SVI
+
+## Make heat map with health insurance variables from ACS data
+
+library(tidyverse)
+library(tidycensus)
+ ## census_api_key("fb99a84608333942affd8e7f5531173a0da1e8a8", install = TRUE)
+options(tigris_use_cache = TRUE)
+
+acs5_profile_vars <- load_variables(year = 2022, dataset = "acs5/profile", cache = TRUE)
+
+unique(acs5_profile_vars$concept)
+
+economic <- acs5_profile_vars %>% filter(concept ==  "SELECTED ECONOMIC CHARACTERISTICS")
+economic
+
+health_insurance <- get_acs(year= 2022, geometry = TRUE, variables = (`No health insurance coverage` = "DP03_0099P"), state = "OH", geography = "tract", county = "Franklin", output = "tidy")
+
+`With health insurance coverage` = "DP03_0096P"
+
+health_insurance
+
+health_insurance1 <-health_insurance %>% rename("Percent of population without health insurance coverage" = estimate)
+health_insurance1
+
+new_health <- health_insurance1 %>% select(-(NAME:variable)) 
+new_health1<- new_health %>% select(-(moe:geometry))
+new_health1
+
+plot(health_insurance1["Percent of population without health insurance coverage"])
+
+## heat map with income 
+
+library(sf)
+library(mapview)
+
+household_income <- get_acs(year = 2022, geometry = TRUE,
+                                 variables = (`Median household income` = "DP03_0062"),
+                                 state = "OH",
+                                 geography = "tract",
+                                 county = "Franklin",
+                                 output = "tidy")
+
+household_income
+
+household_income1 <- household_income %>% rename("Median Household Income" = estimate)
+
+household_income1
+new_income <- household_income1 %>% select(-(NAME:variable)) 
+new_income1 <- new_income %>% select(-(moe:geometry))
+new_income1
+
+plot(household_income1["Median Household Income"])
+
+
+## Population by Race
+
+# get variables in the profile table DP05
+dp05_vars <- acs5_profile_vars %>% filter(grepl("DP05_", name)) %>% rename(variable = name)
+
+
+# extract population by race for counties in Ohio
+county_pop_by_race <- get_acs(geography = "tract", county = "Franklin", state = "OH", year =2022, 
+                              variables = c(White = "DP05_0037",
+                                            `Black or African American` = "DP05_0038",
+                                            `American Indian and Alaska Native` = "DP05_0039",
+                                            Asian = "DP05_0044",
+                                            `Native Hawaiian and Other Pacific Islander` = "DP05_0052"),
+                                            output = "tidy") %>% 
+  rename(Race = variable, Population = estimate) %>% 
+  select(-moe) %>% 
+  # convert long data frame to wide
+  pivot_wider(names_from = Race, values_from = Population)
+
+county_pop_by_race <- county_pop_by_race[-c(328), ]
+county_pop_by_race
+
+census_tract <- read.csv("C:/Users/harpo/Downloads/PLACES__Census_Tract_Data__GIS_Friendly_Format___2024_release_20241202.csv")
+census_tract
+
+new_df <- subset(census_tract, census_tract$StateAbbr == "OH")
+new_df
+new_df2 <- subset(new_df,new_df$CountyName == "Franklin")
+
+new_df2
+
+df_new <- cbind(new_df2$TractFIPS ,new_df2$TotalPopulation, new_df2$CHECKUP_CrudePrev, new_df2$MHLTH_CrudePrev)
+data <- as.data.frame(df_new)
+
+
+names(data) <- c("GEOID", "Total Population", "% Doctor Checkup in Past Year", "% Experiencing bad mental health for >14 days")
+data$GEOID <- as.character(data$GEOID)
+
+race_and_others <- full_join(county_pop_by_race, data, by = "GEOID")
+race_and_others2 <- full_join(race_and_others, new_health1, by = "GEOID")
+total_dataframe <- full_join(race_and_others2, new_income1, by = "GEOID")
+total_dataframe
+
+total_dataframe %>% select(-contains('.')) 
+total_dataframe1 <- total_dataframe[-c(328), ]
+
+```
+
+```{r
+
+
+
+
+
+```
+
