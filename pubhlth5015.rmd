@@ -1,0 +1,113 @@
+---
+title: "R Code for Project"
+author: "Harper Strickland"
+date: "2024-12-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+generate_choropleth_map <- function(sf_object,
+                                    column_name_as_string,
+                                    classification_scheme = "jenks",
+                                    number_of_classes = 5,
+                                    color_palette = "YlOrRd",
+                                    plot_title = "your title here") {
+  
+  class_breaks <- classIntervals(sf_object[[column_name_as_string]], 
+                                 n = number_of_classes,
+                                 style = classification_scheme)
+  
+  sf_object <- sf_object %>% mutate(class_col= cut(get(column_name_as_string), class_breaks$brks, include.lowest = TRUE))
+  
+  map <- ggplot() +
+    geom_sf(data = sf_object, aes(fill = class_col), lwd = 0.1) +
+    scale_fill_brewer(name = column_name_as_string, palette= color_palette, na.value = "grey50") +
+    ggtitle(plot_title)
+  
+  
+  return(map)
+  
+}
+library(sf)
+library(RColorBrewer)
+library(classInt)
+library(gridExtra)
+
+
+franklin <- st_read(("C:/Users/harpo/Downloads/franklin_svi_and_themes.geojson"))
+franklin
+
+socioeconomic_status_SVI <- generate_choropleth_map(franklin, 
+                              column_name_as_string = "RPL_THEME1",
+                              classification_scheme = "jenks",
+                              number_of_classes = 5,
+                              color_palette = "YlOrRd",
+                              plot_title = "Socioeconomic Status")
+
+racial_minority_status_SVI <- generate_choropleth_map(franklin, 
+                              column_name_as_string = "RPL_THEME3",
+                              classification_scheme = "jenks",
+                              number_of_classes = 5,
+                              color_palette = "YlOrRd",
+                              plot_title = "Racial & Ethnic Minority Status")
+
+socioeconomic_status_SVI
+racial_minority_status_SVI
+
+## Make heat map with health insurance variables from ACS data
+
+library(tidyverse)
+library(tidycensus)
+ ## census_api_key("fb99a84608333942affd8e7f5531173a0da1e8a8", install = TRUE)
+options(tigris_use_cache = TRUE)
+
+acs5_profile_vars <- load_variables(year = 2020, dataset = "acs5/profile", cache = TRUE)
+
+unique(acs5_profile_vars$concept)
+
+economic <- acs5_profile_vars %>% filter(concept ==  "SELECTED ECONOMIC CHARACTERISTICS")
+economic
+
+health_insurance <- get_acs(year= 2020, geometry = TRUE, variables = (`No health insurance coverage` = "DP03_0099P"), state = "OH", geography = "tract", county = "Franklin", output = "tidy")
+
+`With health insurance coverage` = "DP03_0096P"
+
+health_insurance
+
+health_insurance1 <-health_insurance %>% rename("Percent of population without health insurance coverage" = estimate)
+
+plot(health_insurance1["Percent of population without health insurance coverage"])
+
+
+
+
+```
+```{r}
+census_tract <- read.csv("C:/Users/harpo/Downloads/PLACES__Census_Tract_Data__GIS_Friendly_Format___2024_release_20241202.csv")
+census_tract
+
+new_df <- subset(census_tract, census_tract$StateAbbr == "OH")
+new_df
+new_df2 <- subset(new_df,new_df$CountyName == "Franklin")
+
+new_df2
+
+# checkup and mental health dataframe
+new_data <- new_df2$CountyName
+df_new <- cbind(new_data, new_df2$TractFIPS, new_df2$TotalPopulation, new_df2$CHECKUP_CrudePrev, new_df2$MHLTH_CrudePrev, new_df2$Geolocation)
+data <- as.data.frame(df_new)
+
+
+names(data) <- c("County", "FIPS Tract Code", "Total Population", "% Doctor Checkup in Past Year", "% Experiencing bad mental health for >14 days", "Geolocation")
+data
+
+
+
+
+
+```
+
